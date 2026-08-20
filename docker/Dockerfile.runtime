@@ -1,0 +1,38 @@
+FROM soricela/bfacore-build:baseline AS builder
+
+# Creamos una copia exclusivamente para runtime.
+# Conservamos intactos los binarios originales del builder.
+RUN cp -a /opt/bfacore /opt/bfacore-runtime \
+    && strip --strip-unneeded /opt/bfacore-runtime/bin/bnetserver \
+    && strip --strip-unneeded /opt/bfacore-runtime/bin/worldserver \
+    && echo "===== BINARIOS STRIPPED =====" \
+    && ls -lh /opt/bfacore-runtime/bin/
+
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV BFACORE_HOME=/opt/bfacore
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libmysqlclient21 \
+    libboost-filesystem1.71.0 \
+    libboost-thread1.71.0 \
+    libboost-program-options1.71.0 \
+    libboost-iostreams1.71.0 \
+    libboost-regex1.71.0 \
+    libssl1.1 \
+    libreadline8 \
+    zlib1g \
+    libbz2-1.0 \
+    liblzma5 \
+    libzstd1 \
+    libicu66 \
+    libtinfo6 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /opt/bfacore-runtime /opt/bfacore
+
+WORKDIR /opt/bfacore/bin
+
+CMD ["/bin/bash"]
