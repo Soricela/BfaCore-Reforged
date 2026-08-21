@@ -2,3 +2,5 @@
 # BfaCore database release artifacts
 docker/db/downloads/
 docker/db/extracted/
+docker/db/generated/
+docker/compose/.env

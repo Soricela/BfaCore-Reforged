@@ -1,0 +1,114 @@
+services:
+
+  bfacore-db:
+    image: mysql:5.7.44
+    container_name: bfacore-db
+    restart: unless-stopped
+
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_allowed_packet=1G
+      - --innodb_buffer_pool_size=1G
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+
+    ports:
+      - "3307:3306"
+
+    volumes:
+      - bfacore-db-data:/var/lib/mysql
+
+      # Se usarán únicamente si algún día se crea el volumen desde cero.
+      - ../db/generated/01_auth.sql:/docker-entrypoint-initdb.d/01_auth.sql:ro
+      - ../db/generated/02_characters.sql:/docker-entrypoint-initdb.d/02_characters.sql:ro
+      - ../db/patches/02b_characters_camp_columns.sql:/docker-entrypoint-initdb.d/02b_characters_camp_columns.sql:ro
+      - ../db/generated/03_hotfixes.sql:/docker-entrypoint-initdb.d/03_hotfixes.sql:ro
+      - ../db/extracted/v0.3/4_world.sql:/docker-entrypoint-initdb.d/04_world.sql:ro
+
+    networks:
+      - bfacore-net
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-uroot",
+          "-p${MYSQL_ROOT_PASSWORD}"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+
+  bfacore-bnet:
+    image: soricela/bfacore-runtime:stripped
+    container_name: bfacore-bnet
+    restart: unless-stopped
+
+    depends_on:
+      bfacore-db:
+        condition: service_healthy
+
+    command:
+      - /opt/bfacore/bin/bnetserver
+      - -c
+      - /opt/bfacore/etc/bnetserver.conf
+
+    ports:
+      - "1119:1119"
+      - "8081:8081"
+
+    volumes:
+      - ../config/bnetserver.conf:/opt/bfacore/etc/bnetserver.conf:ro
+      - ../logs:/opt/bfacore/logs
+
+    networks:
+      - bfacore-net
+
+
+  bfacore-world:
+    image: soricela/bfacore-runtime:stripped
+    container_name: bfacore-world
+    restart: unless-stopped
+
+    depends_on:
+      bfacore-db:
+        condition: service_healthy
+
+    command:
+      - /opt/bfacore/bin/worldserver
+      - -c
+      - /opt/bfacore/etc/worldserver.conf
+
+    ports:
+      # Puerto que anunciamos en realmlist
+      - "18085:8085"
+
+      # IMPORTANTE:
+      # El cliente conecta directamente al InstanceServerPort 8086.
+      - "8086:8086"
+
+    volumes:
+      - ../config/worldserver.conf:/opt/bfacore/etc/worldserver.conf:ro
+      - ${BFACORE_CLIENTDATA}:/opt/bfacore/ClientData:ro
+      - ../logs:/opt/bfacore/logs
+
+    networks:
+      - bfacore-net
+
+
+networks:
+  bfacore-net:
+    name: bfacore-net
+
+
+volumes:
+  bfacore-db-data:
+    name: bfacore-db-data
